@@ -480,6 +480,7 @@ Camera camera; // 3D camera
 void setCameraPos(Camera& camera, vec3 eye, vec3 lookAt) {
     camera.wEye = eye;
     camera.wLookat = lookAt;
+    printf("%d",lookAt.x);
 }
 struct Object {
     //---------------------------
@@ -540,7 +541,7 @@ public:
 	   }
 	   if (spacePressed)
 	   {
-		 setCameraPos(camera ,translation, translation +v);
+		 setCameraPos(camera ,translation, vec3(0, 0, 0));
 	   }
 	   else{
 		  setCameraPos(camera, vec3(0,0,8), vec3(0,0,0));
@@ -549,7 +550,8 @@ public:
     }
     virtual void Animate(float tstart, float tend) { 
 	   move();
-	   rotationAngle = 0.8f * tend; }
+	   //rotationAngle = 0.8f * tend; 
+    }
 };
 std::vector<Object*> objects;
 
@@ -592,7 +594,7 @@ public:
 
 	   // Create objects by setting up their vertex data on the GPU
 	   Object* sphereObject1 = new Object(phongShader, material0, texture, sphere);
-	   sphereObject1->translation = vec3(-6, -6, 0);
+	   sphereObject1->translation = vec3(-7, -6, 0);
 	   sphereObject1->scale = vec3(0.1f, 0.1f, 0.1f);
 	   sphereObject1->setV(vec3(0.01, 0.03, 0));
 	   objects.push_back(sphereObject1);
