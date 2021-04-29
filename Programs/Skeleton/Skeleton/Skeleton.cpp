@@ -347,15 +347,32 @@ public:
 	   X = Cos(U) * Sin(V); Y = Sin(U) * Sin(V); Z = Cos(V);
     }
 };
+
+float distance(vec3 v1, vec3 v2) {
+    return sqrtf((v1.x - v2.x) * (v1.x - v2.x) + (v1.y - v2.y) * (v1.y - v2.y) + (v1.z - v2.z) * (v1.z - v2.z));
+
+}
 class Sheet : public ParamSurface {
 public:
     Sheet() { create(); }
     void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) {
+	   vec3 tomegpont = vec3(0, 0, 0);
+	   float m = 5;
 	   U = U * 2 - 1;
 	   V = V * 2 - 1;
-	   X = U+U;
+	   X = U*3;
+	   Z = V*3;
 	   Y = 0;
-	   Z = V+V;
+	   vec3 tmp = vec3(X.f,Y.f,Z.f);
+
+	   float r = distance(tmp,tomegpont);
+	   //Y =1* m / (r + 0.005 * 4);
+	   tmp = vec3(X.f, Y.f, Z.f);
+	    r = distance(tmp, tomegpont);
+	    r = sqrtf((tomegpont.x - tmp.x)* (tomegpont.x - tmp.x) + (tomegpont.y - tmp.y)*(tomegpont.y- tmp.y));
+	   Y = 1 * m / (r + 0.005 * 4);
+
+	    
     }
 
 
@@ -477,14 +494,13 @@ public:
 	   // Create objects by setting up their vertex data on the GPU
 	   Object* sphereObject1 = new Object(phongShader, material0, texture15x20, sphere);
 	   sphereObject1->translation = vec3(-1.85, 0.1, -1.85);
-	   sphereObject1->scale = vec3(0.1f,0.1f,0.1f);
-	   sphereObject1->setV(vec3(2, 0, 2));
-	   objects.push_back(sphereObject1);
+	   sphereObject1->scale = vec3(0.07f, 0.07f, 0.07f);
 	   Object* sheetObject = new Object(phongShader, material0, texture15x20, sheet);
 	   sheetObject->translation = vec3(0,0,0);
-	   sheetObject->scale =vec3(1.2,1.2,1.2);
+	   sheetObject->scale =vec3(1,1,1);
 	   sheetObject->rotationAxis = vec3(0, 1, 0);
 	   objects.push_back(sheetObject);
+	   objects.push_back(sphereObject1);
 
 	   // Camera
 	   camera.wEye = vec3(0, 1, 0);
@@ -519,7 +535,7 @@ public:
 	   for (Object* obj : objects) obj->Animate(tstart, tend);
 	   if (spacePressed)
 	   {
-		  setCamera(objects[0]->translation, objects[0]->translation + objects[0]->v);
+		  setCamera(objects[1]->translation, objects[1]->translation + objects[1]->v);
 	   }
 	   else
 	   {
@@ -527,14 +543,36 @@ public:
 	   }
     }
     void resetCamera() {
-	   camera.wEye = vec3(0, 1, 0);
+	   camera.wEye = vec3(0, 0.7, 0);
 	   camera.wLookat = vec3(0, 0, 0);
 	   camera.wVup = vec3(1, 0, 0);
     }
     void  setCamera(vec3 eye,vec3 lookAt) {
-	   camera.wEye = eye+vec3(0.5,0.1,0.5);
+	   camera.wEye = eye+vec3(0.5,0.12,0.5);
 	   camera.wLookat = lookAt;
 	   camera.wVup = vec3(0, 1, 0);
+    }
+    void startSphere(vec2 velocity) {
+	   objects[objects.size()-1]->setV(vec3(velocity.y,0,velocity.x)/100);
+	   // Shaders
+	   Shader* phongShader = new PhongShader();
+
+
+	   // Materials
+	   Material* material0 = new Material;
+	   material0->kd = vec3(0.6f, 0.4f, 0.2f);
+	   material0->ks = vec3(4, 4, 4);
+	   material0->ka = vec3(0.1f, 0.1f, 0.1f);
+	   material0->shininess = 100;
+
+	   Texture* texture15x20 = new CheckerBoardTexture(15, 20);
+	   Geometry* sphere = new Sphere();
+	   Object* sphereObject1 = new Object(phongShader, material0, texture15x20, sphere);
+	   sphereObject1->translation = vec3(-1.85, 0.1, -1.85);
+	   sphereObject1->scale = vec3(0.07f, 0.07f, 0.07f);
+	   objects.push_back(sphereObject1);
+
+    
     }
 };
 
@@ -569,7 +607,15 @@ void onKeyboardUp(unsigned char key, int pX, int pY) { }
 
 // Mouse click event
 void onMouse(int button, int state, int pX, int pY) { 
+    if (button ==GLUT_LEFT_BUTTON&&state==GLUT_DOWN&&!spacePressed)
+    {
+	   vec2 pressedAt = vec2(-pX, pY);
+	   vec2 v =  vec2(0, 600)- pressedAt;
+	   printf("%f %f\n",pressedAt.x, pressedAt.y);
 
+	   printf("%f %f\n", v.x, v.y);
+	   scene.startSphere(v);
+    }
     
 
 
