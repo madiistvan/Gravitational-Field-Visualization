@@ -1,4 +1,4 @@
-//=============================================================================================
+ï»¿//=============================================================================================
 // Computer Graphics Sample Program: 3D engine-let
 // Shader: Gouraud, Phong, NPR
 // Material: diffuse + Phong-Blinn
@@ -9,7 +9,9 @@
 //=============================================================================================
 #include "framework.h"
 float dt = 0.002;
-bool spacePressed=false;
+bool spacePressed = false;
+std::vector <vec2> tomegek;
+
 //---------------------------
 template<class T> struct Dnum { // Dual numbers for automatic derivation
 //---------------------------
@@ -59,7 +61,7 @@ public:
 		  0, 0, 0, 1);
     }
 
-     mat4 P() {};
+    mat4 P() {};
 };
 struct PersCamera :Camera {
     float fov, asp, fp, bp;		// intrinsic
@@ -83,14 +85,14 @@ struct OrtoCamera :Camera {
     OrtoCamera() {
 	   w = 2;
 	   h = 2;
-	   n = 1;
-	   f = 6;
+	   n = 0;
+	   f = 50;
     }
     mat4 P() { // projection matrix
 	   return mat4(
-		  2/w, 0, 0, 0,
-		  0, 2/h, 0, 0,
-		  0, 0, -2/(f-n),-(f+n)/(f-n),
+		  2 / w, 0, 0, 0,
+		  0, 2 / h, 0, 0,
+		  0, 0, -2 / (f - n), -(f + n) / (f - n),
 		  0, 0, 0, 1
 	   );
     }
@@ -104,12 +106,45 @@ struct Material {
 };
 
 //---------------------------
+/*
 struct Light {
     //---------------------------
     vec3 La, Le;
     vec4 wLightPos; // homogeneous coordinates, can be at ideal point
 };
+*/
+float length(const vec4& v) { return sqrtf(dot(v, v)); }
+struct Light {
+    //---------------------------
+    vec3 La, Le;
+    vec4 wLightPos; // homogeneous coordinates, can be at ideal point
+    vec4 original;
 
+
+    vec4 qmul(vec4 q1, vec4 q2) {	// quaternion multiplication
+	   vec4 q;
+	   q.x = (q1.w * q2.x) + (q1.x * q2.w) + (q1.y * q2.z) - (q1.z * q2.y);
+	   q.y = (q1.w * q2.y) - (q1.x * q2.z) + (q1.y * q2.w) + (q1.z * q2.x);
+	   q.z = (q1.w * q2.z) + (q1.x * q2.y) - (q1.y * q2.x) + (q1.z * q2.w);
+	   q.w = (q1.w * q2.w) - (q1.x * q2.x) - (q1.y * q2.y) - (q1.z * q2.z);
+
+	   return q;
+    }
+
+    void Animate(float tstart, float tend, vec4 pivot) {
+	   float dt = tend;
+
+	   vec4 q = vec4(cosf(dt / 4), sinf(dt / 4) * cosf(dt) / 2, sinf(dt / 4) * sinf(dt) / 2, sinf(dt / 4) * sqrtf(3 / 4));
+	   q = q / length(q);
+	   vec4 qinv = vec4(-q.x, -q.y, -q.z, q.w);
+	   qinv = qinv / length(qinv);
+
+	   wLightPos = qmul(q, original - pivot);
+	   wLightPos = qmul(wLightPos, qinv);
+	   wLightPos = wLightPos + pivot;
+	   //printf("%lf \n", wLightPos.x);
+    }
+};
 //---------------------------
 class CheckerBoardTexture : public Texture {
     //---------------------------
@@ -153,36 +188,26 @@ public:
 	   setUniform(light.wLightPos, name + ".wLightPos");
     }
 };
-
-//---------------------------
-
-
-//---------------------------
 class PhongShader : public Shader {
     //---------------------------
     const char* vertexSource = R"(
 		#version 330
 		precision highp float;
-
 		struct Light {
 			vec3 La, Le;
 			vec4 wLightPos;
 		};
-
 		uniform mat4  MVP, M, Minv; // MVP, Model, Model-inverse
 		uniform Light[8] lights;    // light sources 
 		uniform int   nLights;
 		uniform vec3  wEye;         // pos of eye
-
 		layout(location = 0) in vec3  vtxPos;            // pos in modeling space
 		layout(location = 1) in vec3  vtxNorm;      	 // normal in modeling space
 		layout(location = 2) in vec2  vtxUV;
-
 		out vec3 wNormal;		    // normal in world space
 		out vec3 wView;             // view in world space
 		out vec3 wLight[8];		    // light dir in world space
 		out vec2 texcoord;
-
 		void main() {
 			gl_Position = vec4(vtxPos, 1) * MVP; // to NDC
 			// vectors for radiance computation
@@ -198,51 +223,52 @@ class PhongShader : public Shader {
 
     // fragment shader in GLSL
     const char* fragmentSource = R"(
-		#version 330
-		precision highp float;
-
-		struct Light {
-			vec3 La, Le;
-			vec4 wLightPos;
-		};
-
-		struct Material {
-			vec3 kd, ks, ka;
-			float shininess;
-		};
-
-		uniform Material material;
-		uniform Light[8] lights;    // light sources 
-		uniform int   nLights;
-		uniform sampler2D diffuseTexture;
-
-		in  vec3 wNormal;       // interpolated world sp normal
-		in  vec3 wView;         // interpolated world sp view
-		in  vec3 wLight[8];     // interpolated world sp illum dir
-		in  vec2 texcoord;
-		
-        out vec4 fragmentColor; // output goes to frame buffer
-
-		void main() {
-			vec3 N = normalize(wNormal);
-			vec3 V = normalize(wView); 
-			if (dot(N, V) < 0) N = -N;	// prepare for one-sided surfaces like Mobius or Klein
-			vec3 texColor = texture(diffuseTexture, texcoord).rgb;
-			vec3 ka = material.ka * texColor;
-			vec3 kd = material.kd * texColor;
-
-			vec3 radiance = vec3(0, 0, 0);
-			for(int i = 0; i < nLights; i++) {
-				vec3 L = normalize(wLight[i]);
-				vec3 H = normalize(L + V);
-				float cost = max(dot(N,L), 0), cosd = max(dot(N,H), 0);
-				// kd and ka are modulated by the texture
-				radiance += ka * lights[i].La + 
-                           (kd * texColor * cost + material.ks * pow(cosd, material.shininess)) * lights[i].Le;
-			}
-			fragmentColor = vec4(radiance, 1);
-		}
-	)";
+    #version 330
+    precision highp float;
+    
+    struct Light {
+    vec3 La, Le;
+    vec4 wLightPos;
+    };
+    
+    struct Material {
+    vec3 kd, ks, ka;
+    float shininess;
+    };
+    
+    uniform Material material;
+    uniform Light[8] lights;    // light sources
+    uniform int   nLights;
+    uniform sampler2D diffuseTexture;
+    
+    in  vec3 wNormal;       // interpolated world sp normal
+    in  vec3 wView;         // interpolated world sp view
+    in  vec3 wLight[8];     // interpolated world sp illum dir
+    in  vec2 texcoord;
+    
+    out vec4 fragmentColor; // output goes to frame buffer
+    
+    void main() {
+    vec3 N = normalize(wNormal);
+    vec3 V = normalize(wView);
+    if (dot(N, V) < 0) N = -N;    // prepare for one-sided surfaces like Mobius or Klein
+    vec3 texColor = texture(diffuseTexture, texcoord).rgb;
+    vec3 ka = material.ka * texColor;
+    vec3 kd = material.kd * texColor;
+    
+    vec3 radiance = vec3(0, 0, 0);
+    for(int i = 0; i < nLights; i++) {
+    vec3 L = normalize(wLight[i]);
+    vec3 H = normalize(L + V);
+    float cost = max(dot(N,L), 0), cosd = max(dot(N,H), 0);
+    // kd and ka are modulated by the texture
+    float d = length(lights[i].wLightPos);
+    radiance += ka * lights[i].La +
+    (kd * texColor * cost + material.ks * pow(cosd, material.shininess)) * lights[i].Le / pow(d, 2);
+    }
+    fragmentColor = vec4(radiance, 1);
+    }
+    )";
 public:
     PhongShader() { create(vertexSource, fragmentSource, "fragmentColor"); }
 
@@ -262,10 +288,6 @@ public:
     }
 };
 
-//---------------------------
-
-
-//---------------------------
 class Geometry {
     //---------------------------
 protected:
@@ -332,6 +354,7 @@ public:
     }
 
     void Draw() {
+	   create();
 	   glBindVertexArray(vao);
 	   for (unsigned int i = 0; i < nStrips; i++) glDrawArrays(GL_TRIANGLE_STRIP, i * nVtxPerStrip, nVtxPerStrip);
     }
@@ -348,52 +371,48 @@ public:
     }
 };
 
-float distance(vec3 v1, vec3 v2) {
-    return sqrtf((v1.x - v2.x) * (v1.x - v2.x) + (v1.y - v2.y) * (v1.y - v2.y) + (v1.z - v2.z) * (v1.z - v2.z));
+float distance(vec2 v1, vec3 v2) {
+    return sqrtf((v1.x - v2.x) * (v1.x - v2.x) + (v1.y - v2.y) * (v1.y - v2.y) );
 
 }
 class Sheet : public ParamSurface {
+    Dnum2 d = Dnum2();
 public:
     Sheet() { create(); }
     void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) {
-	   vec3 tomegpont = vec3(0, 0, 0);
-	   float m = 5;
+
+	   float m = 0.001;
 	   U = U * 2 - 1;
 	   V = V * 2 - 1;
-	   X = U*3;
-	   Z = V*3;
-	   Y = 0;
-	   vec3 tmp = vec3(X.f,Y.f,Z.f);
+	   X = U *2;
+	   Z = V *2;
+	   Y =0;
 
-	   float r = distance(tmp,tomegpont);
-	   //Y =1* m / (r + 0.005 * 4);
-	   tmp = vec3(X.f, Y.f, Z.f);
-	    r = distance(tmp, tomegpont);
-	    r = sqrtf((tomegpont.x - tmp.x)* (tomegpont.x - tmp.x) + (tomegpont.y - tmp.y)*(tomegpont.y- tmp.y));
-	   Y = 1 * m / (r + 0.005 * 4);
+	   
+	   int x=0;
+	   for (vec2 v :tomegek)
+	   {
+		  x++;
+		  Dnum2 tomegpontX = Dnum2(v.x);
+		  Dnum2 tomegpontY = Dnum2(v.y);
+		  Y =Y+ Pow(Pow(Pow(X - tomegpontX, 2) + Pow(Z - tomegpontY, 2), 0.500) + 0.0005 * 4, -1) * -1 * m*x;
+		  
+		  
+	   }
+	   /*
+	   if (X.f==2.0 || Z.f == 2.2|| X.f == -2.0 || Z.f == -2.2)
+		  {
+			 d = Dnum2(0) - Y;
 
-	    
+		  }
+	   Y = Y + d;
+	   
+	   */
+	   
     }
 
 
 };
-
-
-
-//---------------------------
-
-
-//---------------------------
-
-
-//---------------------------
-
-//---------------------------
-
-
-//---------------------------
-
-
 //---------------------------
 struct Object {
     //---------------------------
@@ -401,7 +420,7 @@ struct Object {
     Material* material;
     Texture* texture;
     Geometry* geometry;
-    vec3 scale, translation, rotationAxis,v,a;
+    vec3 scale, translation, rotationAxis, v, a;
     float rotationAngle;
 public:
     Object(Shader* _shader, Material* _material, Texture* _texture, Geometry* _geometry) :
@@ -433,7 +452,7 @@ public:
 	   v = _v;
     }
     virtual void Animate(float tstart, float tend) {
-	   translation = translation + v*dt;
+	   translation = translation + v * dt;
 	   int tmp1 = 2, tmp2 = 4;
 	   if (translation.z > tmp1)
 	   {
@@ -451,9 +470,9 @@ public:
 	   {
 		  translation.x += tmp2;
 	   }
-	   
 
-	  
+
+
     }
 };
 
@@ -462,7 +481,7 @@ class Scene {
     //---------------------------
     OrtoCamera camera; // 3D camera
     std::vector<Object*> objects;
-
+    vec3 eye=vec3(0,1,0);
     std::vector<Light> lights;
 public:
     void Build() {
@@ -496,30 +515,31 @@ public:
 	   sphereObject1->translation = vec3(-1.85, 0.1, -1.85);
 	   sphereObject1->scale = vec3(0.07f, 0.07f, 0.07f);
 	   Object* sheetObject = new Object(phongShader, material0, texture15x20, sheet);
-	   sheetObject->translation = vec3(0,0,0);
-	   sheetObject->scale =vec3(1,1,1);
+	   sheetObject->translation = vec3(0, 0, 0);
+	   sheetObject->scale = vec3(1, 1, 1);
 	   sheetObject->rotationAxis = vec3(0, 1, 0);
 	   objects.push_back(sheetObject);
 	   objects.push_back(sphereObject1);
 
 	   // Camera
-	   camera.wEye = vec3(0, 1, 0);
+	   camera.wEye = eye;
 	   camera.wLookat = vec3(0, 0, 0);
 	   camera.wVup = vec3(1, 0, 0);
 
 	   // Lights
-	   lights.resize(3);
+	   lights.resize(2);
 	   lights[0].wLightPos = vec4(5, 5, 4, 0);	// ideal point -> directional light source
-	   lights[0].La = vec3(0.1f, 0.1f, 1);
-	   lights[0].Le = vec3(3, 0, 0);
+	   lights[0].La = vec3(4.1f,4.1f, 4);
+	   lights[0].Le = vec3(30, 30, 30);
+	   lights[0].original = lights[0].wLightPos;
 
 	   lights[1].wLightPos = vec4(5, 10, 20, 0);	// ideal point -> directional light source
-	   lights[1].La = vec3(0.2f, 0.2f, 0.2f);
-	   lights[1].Le = vec3(0, 3, 0);
+	   lights[1].La = vec3(4.2f, 4.2f, 4.2f);
+	   lights[1].Le = vec3(30, 30, 30);
+	   lights[1].original = lights[1].wLightPos;
 
-	   lights[2].wLightPos = vec4(-5, 5, 5, 0);	// ideal point -> directional light source
-	   lights[2].La = vec3(0.1f, 0.1f, 0.1f);
-	   lights[2].Le = vec3(0, 0, 3);
+
+	   
     }
 
     void Render() {
@@ -532,28 +552,32 @@ public:
     }
 
     void Animate(float tstart, float tend) {
-	   for (Object* obj : objects) obj->Animate(tstart, tend);
+	   
 	   if (spacePressed)
 	   {
-		  setCamera(objects[1]->translation, objects[1]->translation + objects[1]->v);
+		  setCamera(objects[1]->translation, objects[1]->v);
 	   }
 	   else
 	   {
 		  resetCamera();
 	   }
+	   lights[0].Animate(tstart, tend, lights[1].original);
+	   lights[1].Animate(tstart, tend, lights[0].original);
+
+	   for (Object* obj : objects) obj->Animate(tstart, tend);
     }
     void resetCamera() {
-	   camera.wEye = vec3(0, 0.7, 0);
+	   camera.wEye = eye;
 	   camera.wLookat = vec3(0, 0, 0);
 	   camera.wVup = vec3(1, 0, 0);
     }
-    void  setCamera(vec3 eye,vec3 lookAt) {
-	   camera.wEye = eye+vec3(0.5,0.12,0.5);
-	   camera.wLookat = lookAt;
+    void  setCamera(vec3 eye1, vec3 lookAt) {
+	   camera.wEye = eye1+0.5  *lookAt;
+	   camera.wLookat = eye1+1.01*lookAt;
 	   camera.wVup = vec3(0, 1, 0);
     }
     void startSphere(vec2 velocity) {
-	   objects[objects.size()-1]->setV(vec3(velocity.y,0,velocity.x)/100);
+	   objects[objects.size() - 1]->setV(vec3(velocity.y, 0, velocity.x) / 100);
 	   // Shaders
 	   Shader* phongShader = new PhongShader();
 
@@ -572,12 +596,10 @@ public:
 	   sphereObject1->scale = vec3(0.07f, 0.07f, 0.07f);
 	   objects.push_back(sphereObject1);
 
-    
+
     }
 };
-
 Scene scene;
-
 // Initialization, create an OpenGL context
 void onInitialization() {
     glViewport(0, 0, windowWidth, windowHeight);
@@ -585,7 +607,6 @@ void onInitialization() {
     glDisable(GL_CULL_FACE);
     scene.Build();
 }
-
 // Window has become invalid: Redraw
 void onDisplay() {
     glClearColor(0.5f, 0.5f, 0.8f, 1.0f);							// background color 
@@ -593,42 +614,39 @@ void onDisplay() {
     scene.Render();
     glutSwapBuffers();									// exchange the two buffers
 }
-
 // Key of ASCII code pressed
-void onKeyboard(unsigned char key, int pX, int pY) { 
-    if (key==' ')
+void onKeyboard(unsigned char key, int pX, int pY) {
+    if (key == ' ')
     {
 	   spacePressed = !spacePressed;
     }
 }
-
 // Key of ASCII code released
 void onKeyboardUp(unsigned char key, int pX, int pY) { }
-
 // Mouse click event
-void onMouse(int button, int state, int pX, int pY) { 
-    if (button ==GLUT_LEFT_BUTTON&&state==GLUT_DOWN&&!spacePressed)
+void onMouse(int button, int state, int pX, int pY) {
+    if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN && !spacePressed)
     {
 	   vec2 pressedAt = vec2(-pX, pY);
-	   vec2 v =  vec2(0, 600)- pressedAt;
-	   printf("%f %f\n",pressedAt.x, pressedAt.y);
-
-	   printf("%f %f\n", v.x, v.y);
+	   vec2 v = vec2(0, 600) - pressedAt;
 	   scene.startSphere(v);
     }
-    
+    if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN && !spacePressed)
+    {
+	   float cX = 2.0f * pX / windowWidth - 1;	
+	   float cY = 1.0f - 2.0f * pY / windowHeight;
+	   tomegek.push_back(vec2(2*cY,2*cX));
+    }
 
 
 }
-
 // Move mouse with key pressed
 void onMouseMotion(int pX, int pY) {
 }
-
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
     static float tend = 0;
-    const float dt = 0.1f; // dt is ”infinitesimal”
+    const float dt = 0.1f; // dt is Â”infinitesimalÂ”
     float tstart = tend;
     tend = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
 
