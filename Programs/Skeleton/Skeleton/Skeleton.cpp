@@ -8,9 +8,10 @@
 // Light: point or directional sources
 //=============================================================================================
 #include "framework.h"
-float dt = 0.002;
+float dt = 0.0005;
 bool spacePressed = false;
 std::vector <vec2> tomegek;
+float m = 0.001;
 
 //---------------------------
 template<class T> struct Dnum { // Dual numbers for automatic derivation
@@ -42,8 +43,7 @@ template<class T> Dnum<T> Pow(Dnum<T> g, float n) {
 }
 
 typedef Dnum<vec2> Dnum2;
-
-const int tessellationLevel = 20;
+const int tessellationLevel = 100;
 
 //---------------------------
 struct Camera { // 3D camera
@@ -317,7 +317,7 @@ class ParamSurface : public Geometry {
     unsigned int nVtxPerStrip, nStrips;
 public:
     ParamSurface() { nVtxPerStrip = nStrips = 0; }
-
+    
     virtual void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) = 0;
 
     VertexData GenVertexData(float u, float v) {
@@ -354,7 +354,6 @@ public:
     }
 
     void Draw() {
-	   create();
 	   glBindVertexArray(vao);
 	   for (unsigned int i = 0; i < nStrips; i++) glDrawArrays(GL_TRIANGLE_STRIP, i * nVtxPerStrip, nVtxPerStrip);
     }
@@ -381,7 +380,6 @@ public:
     Sheet() { create(); }
     void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) {
 
-	   float m = 0.001;
 	   U = U * 2 - 1;
 	   V = V * 2 - 1;
 	   X = U *2;
@@ -399,16 +397,6 @@ public:
 		  
 		  
 	   }
-	   /*
-	   if (X.f==2.0 || Z.f == 2.2|| X.f == -2.0 || Z.f == -2.2)
-		  {
-			 d = Dnum2(0) - Y;
-
-		  }
-	   Y = Y + d;
-	   
-	   */
-	   
     }
 
 
@@ -429,8 +417,8 @@ public:
 	   texture = _texture;
 	   material = _material;
 	   geometry = _geometry;
-	   v = 0;
-	   a = 0;
+	   v = vec3(0,0,0);
+	   a = vec3(0, 0, 0);
     }
 
     virtual void SetModelingTransform(mat4& M, mat4& Minv) {
@@ -438,6 +426,7 @@ public:
 	   Minv = TranslateMatrix(-translation) * RotationMatrix(-rotationAngle, rotationAxis) * ScaleMatrix(vec3(1 / scale.x, 1 / scale.y, 1 / scale.z));
     }
     void Draw(RenderState state) {
+
 	   mat4 M, Minv;
 	   SetModelingTransform(M, Minv);
 	   state.M = M;
@@ -452,38 +441,87 @@ public:
 	   v = _v;
     }
     virtual void Animate(float tstart, float tend) {
-	   translation = translation + v * dt;
 	   int tmp1 = 2, tmp2 = 4;
 	   if (translation.z > tmp1)
 	   {
 		  translation.z -= tmp2;
+		  v = normalize(v);
 	   }
 	   if (translation.x > tmp1)
 	   {
 		  translation.x -= tmp2;
+		  v = normalize(v);
 	   }
 	   if (-translation.z > tmp1)
 	   {
 		  translation.z += tmp2;
+		  v = -normalize(v);
+		  a = -a;
 	   }
 	   if (-translation.x > tmp1)
 	   {
 		  translation.x += tmp2;
+		  v = -normalize(v);
+		  a = -a;
 	   }
+	   Dnum2 Y = 0,X=translation.x,Z=translation.z;
+	   Dnum2 tomegpontX;
+	   Dnum2 tomegpontY;
+	   int x=1;
+	   vec3 norm = vec3(0, 1, 0);
+	   for (size_t i = 0; i < tomegek.size(); i++)
+	   {
+		  norm.x -= -1 * ((i + 1) * (tomegek[i].x + translation.x)) / pow(pow(-tomegek[i].x+translation.x,2)+ pow(-tomegek[i].y + translation.z, 2),0.5);
+		  norm.z -= -1 * ((i + 1) * (tomegek[i].y + translation.z)) / pow(pow(-tomegek[i].y + translation.z, 2) + pow(-tomegek[i].x + translation.x, 2), 0.5);
 
-
-
+	   }
+	   normalize(norm);
+	   a = vec3(-1,-2,-1)*norm;
+	   if (abs(v.x)> 0.1 || abs(v.y) > 0.1 || abs(v.z) > 0.1)
+	    {
+		  
+		  for (vec2 v : tomegek)
+		  {
+			 tomegpontX =Dnum2(v.x);
+			 tomegpontY = Dnum2(v.y);
+			 Y = Y + Pow(Pow(Pow(X - tomegpontX, 2) + Pow(Z - tomegpontY, 2), 0.500) + 0.0005 * 4, -1) * -1 * m * x;
+			 printf("%f\n",Y.d.y);
+			 x++;
+		  }
+		  Y =Y+ 0.1;
+		  translation.y=Y.f;
+		  v =v+ dt * a;
+	    }
+	   translation = translation + v * dt;
+	   //if (abs(v.x) > 0.1 || abs(v.y) > 0.1 || abs(v.z) > 0.1)
     }
 };
-
+std::vector<Object*> objects;
 //---------------------------
 class Scene {
     //---------------------------
     OrtoCamera camera; // 3D camera
-    std::vector<Object*> objects;
     vec3 eye=vec3(0,1,0);
     std::vector<Light> lights;
 public:
+    void createSheet() {
+	   // Materials
+	   Shader* phongShader = new PhongShader();
+
+	   Material* material0 = new Material;
+	   material0->kd = vec3(0.6f, 0.4f, 0.2f);
+	   material0->ks = vec3(4, 4, 4);
+	   material0->ka = vec3(0.1f, 0.1f, 0.1f);
+	   material0->shininess = 100;
+	   Texture* texture15x20 = new CheckerBoardTexture(15, 20);
+	   Geometry* sheet = new Sheet();
+	   Object* sheetObject = new Object(phongShader, material0, texture15x20, sheet);
+	   sheetObject->translation = vec3(0, 0, 0);
+	   sheetObject->scale = vec3(1, 1, 1);
+	   sheetObject->rotationAxis = vec3(0, 1, 0);
+	   objects[0]=sheetObject;
+
+    }
     void Build() {
 	   // Shaders
 	   Shader* phongShader = new PhongShader();
@@ -514,7 +552,7 @@ public:
 	   Object* sphereObject1 = new Object(phongShader, material0, texture15x20, sphere);
 	   sphereObject1->translation = vec3(-1.85, 0.1, -1.85);
 	   sphereObject1->scale = vec3(0.07f, 0.07f, 0.07f);
-	   Object* sheetObject = new Object(phongShader, material0, texture15x20, sheet);
+	   Object* sheetObject= new Object(phongShader, material0, texture15x20, sheet);
 	   sheetObject->translation = vec3(0, 0, 0);
 	   sheetObject->scale = vec3(1, 1, 1);
 	   sheetObject->rotationAxis = vec3(0, 1, 0);
@@ -529,12 +567,12 @@ public:
 	   // Lights
 	   lights.resize(2);
 	   lights[0].wLightPos = vec4(5, 5, 4, 0);	// ideal point -> directional light source
-	   lights[0].La = vec3(4.1f,4.1f, 4);
+	   lights[0].La = vec3(1.1f,1.1f, 1);
 	   lights[0].Le = vec3(30, 30, 30);
 	   lights[0].original = lights[0].wLightPos;
 
 	   lights[1].wLightPos = vec4(5, 10, 20, 0);	// ideal point -> directional light source
-	   lights[1].La = vec3(4.2f, 4.2f, 4.2f);
+	   lights[1].La = vec3(1.1f, 1.1f, 1);
 	   lights[1].Le = vec3(30, 30, 30);
 	   lights[1].original = lights[1].wLightPos;
 
@@ -564,7 +602,10 @@ public:
 	   lights[0].Animate(tstart, tend, lights[1].original);
 	   lights[1].Animate(tstart, tend, lights[0].original);
 
-	   for (Object* obj : objects) obj->Animate(tstart, tend);
+	   for (Object* obj : objects) {
+		  obj->Animate(tstart, tend);
+	   
+	   }
     }
     void resetCamera() {
 	   camera.wEye = eye;
@@ -636,6 +677,7 @@ void onMouse(int button, int state, int pX, int pY) {
 	   float cX = 2.0f * pX / windowWidth - 1;	
 	   float cY = 1.0f - 2.0f * pY / windowHeight;
 	   tomegek.push_back(vec2(2*cY,2*cX));
+	   scene.createSheet();
     }
 
 
