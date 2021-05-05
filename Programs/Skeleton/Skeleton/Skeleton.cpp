@@ -11,7 +11,7 @@
 float dt = 0.0005;
 bool spacePressed = false;
 std::vector <vec2> tomegek;
-float m = 0.001;
+float m = 0.002;
 
 //---------------------------
 template<class T> struct Dnum { // Dual numbers for automatic derivation
@@ -151,9 +151,9 @@ class CheckerBoardTexture : public Texture {
 public:
     CheckerBoardTexture(const int width, const int height) : Texture() {
 	   std::vector<vec4> image(width * height);
-	   const vec4 yellow(1, 1, 0, 1), blue(0, 0, 1, 1);
+	   const vec4 yellow(1, 0.1, 0.1, 1), blue(0, 0, 1, 1);
 	   for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
-		  image[y * width + x] = (x & 1) ^ (y & 1) ? yellow : blue;
+		  image[y * width + x] = (x & 1) ^ (y & 1) ? yellow : yellow;
 	   }
 	   create(width, height, image, GL_NEAREST);
     }
@@ -208,10 +208,13 @@ class PhongShader : public Shader {
 		out vec3 wView;             // view in world space
 		out vec3 wLight[8];		    // light dir in world space
 		out vec2 texcoord;
+		out float melyseg;
 		void main() {
 			gl_Position = vec4(vtxPos, 1) * MVP; // to NDC
 			// vectors for radiance computation
 			vec4 wPos = vec4(vtxPos, 1) * M;
+	   int tmp =int(vtxPos.y);
+			melyseg=vtxPos.y-tmp;
 			for(int i = 0; i < nLights; i++) {
 				wLight[i] = lights[i].wLightPos.xyz * wPos.w - wPos.xyz * lights[i].wLightPos.w;
 			}
@@ -245,7 +248,7 @@ class PhongShader : public Shader {
     in  vec3 wView;         // interpolated world sp view
     in  vec3 wLight[8];     // interpolated world sp illum dir
     in  vec2 texcoord;
-    
+    in  float melyseg;
     out vec4 fragmentColor; // output goes to frame buffer
     
     void main() {
@@ -253,7 +256,10 @@ class PhongShader : public Shader {
     vec3 V = normalize(wView);
     if (dot(N, V) < 0) N = -N;    // prepare for one-sided surfaces like Mobius or Klein
     vec3 texColor = texture(diffuseTexture, texcoord).rgb;
-    vec3 ka = material.ka * texColor;
+ vec3 ka;
+    if(floor(melyseg)==0)ka=vec3(0.1,0.1,0.1);
+     ka = material.ka * texColor/floor(5000*melyseg*melyseg);
+	ka-=vec3(0.01,0.01,0.01);
     vec3 kd = material.kd * texColor;
     
     vec3 radiance = vec3(0, 0, 0);
@@ -393,8 +399,10 @@ public:
 		  x++;
 		  Dnum2 tomegpontX = Dnum2(v.x);
 		  Dnum2 tomegpontY = Dnum2(v.y);
+		  		  
 		  Y =Y+ Pow(Pow(Pow(X - tomegpontX, 2) + Pow(Z - tomegpontY, 2), 0.500) + 0.0005 * 4, -1) * -1 * m*x;
 	   }
+	   
     }
 
 
@@ -527,7 +535,7 @@ public:
 	   material0->kd = vec3(0.6f, 0.4f, 0.2f);
 	   material0->ks = vec3(4, 4, 4);
 	   material0->ka = vec3(0.1f, 0.1f, 0.1f);
-	   material0->shininess = 100;
+	   material0->shininess = 10;
 	   Texture* texture15x20 = new CheckerBoardTexture(15, 20);
 	   Geometry* sheet = new Sheet();
 	   Object* sheetObject = new Object(phongShader, material0, texture15x20, sheet);
@@ -547,13 +555,9 @@ public:
 	   material0->kd = vec3(0.6f, 0.4f, 0.2f);
 	   material0->ks = vec3(4, 4, 4);
 	   material0->ka = vec3(0.1f, 0.1f, 0.1f);
-	   material0->shininess = 100;
+	   material0->shininess = 10;
 
-	   Material* material1 = new Material;
-	   material1->kd = vec3(0.8f, 0.6f, 0.4f);
-	   material1->ks = vec3(0.3f, 0.3f, 0.3f);
-	   material1->ka = vec3(0.2f, 0.2f, 0.2f);
-	   material1->shininess = 30;
+	   
 
 	   // Textures
 	   Texture* texture4x8 = new CheckerBoardTexture(4, 8);
