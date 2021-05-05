@@ -76,7 +76,7 @@ public:
     mat4 P() { // projection matrix
 	   return mat4(1 / (tan(fov / 2) * asp), 0, 0, 0,
 		  0, 1 / tan(fov / 2), 0, 0,
-		  0, 0, -(fp + bp) / (bp - fp), -1,
+		  0, 0, -(fp + bp) / (bp - fp), -1,//0
 		  0, 0, -2 * fp * bp / (bp - fp), 0);
     }
 };
@@ -305,14 +305,14 @@ public:
 	   glDeleteVertexArrays(1, &vao);
     }
 };
-
-//---------------------------
-class ParamSurface : public Geometry {
-    //---------------------------
-    struct VertexData {
+struct VertexData {
 	   vec3 position, normal;
 	   vec2 texcoord;
     };
+//---------------------------
+class ParamSurface : public Geometry {
+    //---------------------------
+    
 
     unsigned int nVtxPerStrip, nStrips;
 public:
@@ -370,7 +370,7 @@ public:
     }
 };
 
-float distance(vec2 v1, vec3 v2) {
+float distance(vec2 v1, vec2 v2) {
     return sqrtf((v1.x - v2.x) * (v1.x - v2.x) + (v1.y - v2.y) * (v1.y - v2.y) );
 
 }
@@ -394,8 +394,6 @@ public:
 		  Dnum2 tomegpontX = Dnum2(v.x);
 		  Dnum2 tomegpontY = Dnum2(v.y);
 		  Y =Y+ Pow(Pow(Pow(X - tomegpontX, 2) + Pow(Z - tomegpontY, 2), 0.500) + 0.0005 * 4, -1) * -1 * m*x;
-		  
-		  
 	   }
     }
 
@@ -411,6 +409,7 @@ struct Object {
     vec3 scale, translation, rotationAxis, v, a;
     float rotationAngle;
 public:
+    bool rajzoljae = true;
     Object(Shader* _shader, Material* _material, Texture* _texture, Geometry* _geometry) :
 	   scale(vec3(1, 1, 1)), translation(vec3(0, 0, 0)), rotationAxis(0, 0, 1), rotationAngle(0) {
 	   shader = _shader;
@@ -426,7 +425,7 @@ public:
 	   Minv = TranslateMatrix(-translation) * RotationMatrix(-rotationAngle, rotationAxis) * ScaleMatrix(vec3(1 / scale.x, 1 / scale.y, 1 / scale.z));
     }
     void Draw(RenderState state) {
-
+	   if (!rajzoljae)return;
 	   mat4 M, Minv;
 	   SetModelingTransform(M, Minv);
 	   state.M = M;
@@ -445,38 +444,29 @@ public:
 	   if (translation.z > tmp1)
 	   {
 		  translation.z -= tmp2;
-		  v = normalize(v);
 	   }
 	   if (translation.x > tmp1)
 	   {
 		  translation.x -= tmp2;
-		  v = normalize(v);
 	   }
 	   if (-translation.z > tmp1)
 	   {
 		  translation.z += tmp2;
-		  v = -normalize(v);
-		  a = -a;
+		 
 	   }
 	   if (-translation.x > tmp1)
 	   {
 		  translation.x += tmp2;
-		  v = -normalize(v);
-		  a = -a;
+		
 	   }
-	   Dnum2 Y = 0,X=translation.x,Z=translation.z;
+	   Dnum2 U = Dnum2(translation.x,vec2(1,0)), V = Dnum2(translation.z, vec2(0, 1));
+	  
+	   Dnum2 Y = 0,X=U,Z=V;
+
 	   Dnum2 tomegpontX;
 	   Dnum2 tomegpontY;
 	   int x=1;
-	   vec3 norm = vec3(0, 1, 0);
-	   for (size_t i = 0; i < tomegek.size(); i++)
-	   {
-		  norm.x -= -1 * ((i + 1) * (tomegek[i].x + translation.x)) / pow(pow(-tomegek[i].x+translation.x,2)+ pow(-tomegek[i].y + translation.z, 2),0.5);
-		  norm.z -= -1 * ((i + 1) * (tomegek[i].y + translation.z)) / pow(pow(-tomegek[i].y + translation.z, 2) + pow(-tomegek[i].x + translation.x, 2), 0.5);
-
-	   }
-	   normalize(norm);
-	   a = vec3(-1,-2,-1)*norm;
+	   vec3 norm = vec3(0, 0, 0);
 	   if (abs(v.x)> 0.1 || abs(v.y) > 0.1 || abs(v.z) > 0.1)
 	    {
 		  
@@ -485,12 +475,37 @@ public:
 			 tomegpontX =Dnum2(v.x);
 			 tomegpontY = Dnum2(v.y);
 			 Y = Y + Pow(Pow(Pow(X - tomegpontX, 2) + Pow(Z - tomegpontY, 2), 0.500) + 0.0005 * 4, -1) * -1 * m * x;
-			 printf("%f\n",Y.d.y);
 			 x++;
 		  }
-		  Y =Y+ 0.1;
+		  Y =Y+ 0.01;
+		  vec3 drdU(X.d.x, Y.d.x, Z.d.x), drdV(X.d.y, Y.d.y, Z.d.y);
+		  norm= cross(drdU, drdV);
+		  printf("norm:.%f %f %f\n", norm.x, norm.y, norm.z);
+
+		  if (norm.y>0)
+		  {
+			 a = 5000 * norm;
+		  }
+		  else
+		  {
+			 a = -5000 * norm;
+		  }
+		 a = a * vec3(1, 0, 1);
+
+		  printf("a.%f %f %f\n", a.x, a.y, a.z);
+		  printf("v:%f %f %f\n", v.x, v.y, v.z);
+
+		  //printf("%f\n",Y.f);
 		  translation.y=Y.f;
 		  v =v+ dt * a;
+		  printf("v2:%f %f %f\n\n", v.x, v.y, v.z);
+		  for (vec2 tomeg:tomegek) {
+			 if (distance(vec2(translation.x,translation.z),tomeg) < 0.05)
+			 {
+				rajzoljae = false;
+			 }
+		  }
+
 	    }
 	   translation = translation + v * dt;
 	   //if (abs(v.x) > 0.1 || abs(v.y) > 0.1 || abs(v.z) > 0.1)
