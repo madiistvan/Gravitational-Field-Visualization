@@ -32,10 +32,10 @@
 // negativ elojellel szamoljak el es ezzel parhuzamosan eljaras is indul velem szemben.
 //=============================================================================================
 #include "framework.h"
-float dt = 0.0008;
+float dt = 0.001;
 bool spacePressed = false;
 std::vector <vec2> tomegek;
-float m = 0.009;
+float m = 0.01;
 template<class T> struct Dnum {
     float f;
     T d;
@@ -85,7 +85,7 @@ public:
     PersCamera() {
 	   asp = (float)windowWidth / windowHeight;
 	   fov = 75.0f * (float)M_PI / 180.0f;
-	   fp = 1; bp = 0.005;
+	   fp = 1; bp = 0;
 
     }
 
@@ -134,7 +134,6 @@ struct Light {
 
 	   return q;
     }
-
     void Animate(float tstart, float tend, vec4 pivot) {
 	   float dt = tend;
 
@@ -164,8 +163,8 @@ class RanadomColorTexture : public Texture {
 public:
     RanadomColorTexture(const int width, const int height) : Texture() {
 	   std::vector<vec4> image(width * height);
-	   float x = ((double)rand() / (RAND_MAX));
-	   const vec4 color(1, 0, 0, 1);
+	   float x = ((float)rand() / (RAND_MAX) * 10);
+	   const vec4 color(((float)rand() / (RAND_MAX)), ((float)rand() / (RAND_MAX)), ((float)rand() / (RAND_MAX)), 1);
 	   for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
 		  image[y * width + x] = color;
 	   }
@@ -259,7 +258,7 @@ class PhongShader : public Shader {
     void main() {
     vec3 N = normalize(wNormal);
     vec3 V = normalize(wView);
-    if (dot(N, V) < 0) N = -N;    // prepare for one-sided surfaces like Mobius or Klein
+    //if (dot(N, V) < 0) N = -N;    // prepare for one-sided surfaces like Mobius or Klein
     vec3 texColor = texture(diffuseTexture, texcoord).rgb;
  vec3 ka;
     
@@ -364,11 +363,10 @@ class PhongShader2 : public Shader {
     void main() {
     vec3 N = normalize(wNormal);
     vec3 V = normalize(wView);
-    if (dot(N, V) < 0) N = -N;   
+    //if (dot(N, V) < 0) N = -N;   
     vec3 texColor = texture(diffuseTexture, texcoord).rgb;
  vec3 ka;
-    if(floor(melyseg)==0)ka=vec3(0.1,0.1,0.1);
-     ka = material.ka * texColor*0.34;
+     ka = material.ka * texColor*0.375;
     vec3 kd = material.kd * texColor;
     
     vec3 radiance = vec3(0, 0, 0);
@@ -379,7 +377,7 @@ class PhongShader2 : public Shader {
     // kd and ka are modulated by the texture
     float d = length(lights[i].wLightPos);
     radiance += ka * lights[i].La +
-    (kd * texColor * cost + material.ks * pow(cosd, material.shininess)) * lights[i].Le / pow(d, 2);
+    (kd * texColor * cost + material.ks * pow(cosd, material.shininess)) * lights[i].Le*75 / pow(d, 2);
     }
     fragmentColor = vec4(radiance, 1);
     }
@@ -592,21 +590,21 @@ public:
 
 		  if (norm.y > 0)
 		  {
-			 a = 5000 * norm;
+			 a = 4000 * norm;
 		  }
 		  else
 		  {
-			 a = -5000 * norm;
+			 a = -4000 * norm;
 		  }
 		  a = a * vec3(1, 0, 1);
-		  translation.y = Y.f + 0.05 * -norm.y;
+		  float tmp = translation.y;
+		  translation.y = Y.f + 0.07;
 		  v = v + dt * a;
 		  for (vec2 tomeg : tomegek) {
-			 if (distance(vec2(translation.x, translation.z), tomeg) < 0.07)
+			 if (distance(vec2(translation.x, translation.z), tomeg) < 0.04)
 			 {
 				rajzoljae = false;
 				pov = false;
-
 			 }
 		  }
 
